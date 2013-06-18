@@ -33,6 +33,8 @@ class TwitterOAuth {
   public $decode_json = TRUE;
   /* Contains the last HTTP headers returned. */
   public $http_info;
+  /* Contains the last HTTP headers returned. */
+  public $http_header;
   /* Set the useragnet. */
   public $useragent = 'TwitterOAuth v0.2.0-beta2';
   /* Immediately retry the API call if the response was not successful. */
@@ -54,6 +56,7 @@ class TwitterOAuth {
    */
   function lastStatusCode() { return $this->http_status; }
   function lastAPICall() { return $this->last_api_call; }
+  function lastResponseHeader() { return $this->http_header; }
 
   /**
    * construct TwitterOAuth object
@@ -203,7 +206,7 @@ class TwitterOAuth {
     curl_setopt($ci, CURLOPT_HTTPHEADER, array('Expect:'));
     curl_setopt($ci, CURLOPT_SSL_VERIFYPEER, $this->ssl_verifypeer);
     curl_setopt($ci, CURLOPT_HEADERFUNCTION, array($this, 'getHeader'));
-    curl_setopt($ci, CURLOPT_HEADER, FALSE);
+    curl_setopt($ci, CURLOPT_HEADER, TRUE);
 
     switch ($method) {
       case 'POST':
@@ -224,8 +227,29 @@ class TwitterOAuth {
     $this->http_code = curl_getinfo($ci, CURLINFO_HTTP_CODE);
     $this->http_info = array_merge($this->http_info, curl_getinfo($ci));
     $this->url = $url;
+
+    $header_size = curl_getinfo($ci, CURLINFO_HEADER_SIZE);
+    $this->http_header = $this->parseHeader(substr($response, 0, $header_size));
+    $response = substr($response, $header_size);
+
     curl_close ($ci);
     return $response;
+  }
+
+  /**
+   *  Parse response header string into array
+   */
+  function parseHeader($header)
+  {
+    $ret = [];
+    $data = explode("\n", $header);
+    array_shift($data); // skip return code
+    foreach($data as $part) {
+      $middle = explode(":", $part);
+      if (count($middle) == 2)
+        $ret[trim($middle[0])] = trim($middle[1]);
+    }
+    return $ret;
   }
 
   /**
@@ -236,7 +260,7 @@ class TwitterOAuth {
     if (!empty($i)) {
       $key = str_replace('-', '_', strtolower(substr($header, 0, $i)));
       $value = trim(substr($header, $i + 2));
-      $this->http_header[$key] = $value;
+      $this->http_info[$key] = $value;
     }
     return strlen($header);
   }
